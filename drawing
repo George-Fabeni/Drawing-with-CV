@@ -1,0 +1,201 @@
+from cvzone.HandTrackingModule import HandDetector
+import cv2
+from PIL import ImageFont, ImageDraw, Image
+import numpy as np
+
+# Lista de cores para o círculo de cores
+color_wheel = [
+    (255, 0, 0),   # Red
+    (255, 51, 0),  # Orange-Red
+    (255, 102, 0), # Dark Orange
+    (255, 153, 0), # Orange
+    (255, 204, 0), # Light Orange
+    (255, 255, 0), # Yellow
+    (204, 255, 0), # Yellow-Green
+    (153, 255, 0), # Light Green
+    (102, 255, 0), # Lime Green
+    (51, 255, 0),  # Green
+    (0, 255, 0),   # Pure Green
+    (0, 255, 51),  # Greenish Teal
+    (0, 255, 102), # Teal
+    (0, 255, 153), # Aquamarine
+    (0, 255, 204), # Light Cyan
+    (0, 255, 255), # Cyan
+    (0, 204, 255), # Sky Blue
+    (0, 153, 255), # Light Blue
+    (0, 102, 255), # Dodger Blue
+    (0, 51, 255),  # Royal Blue
+    (0, 0, 255),   # Blue
+    (51, 0, 255),  # Indigo
+    (102, 0, 255), # Violet
+    (153, 0, 255), # Purple
+    (204, 0, 255), # Magenta
+    (255, 0, 255), # Fuchsia
+    (255, 0, 204), # Deep Pink
+    (255, 0, 153), # Hot Pink
+    (255, 0, 102), # Pink
+    (255, 0, 51)   # Light Red
+]
+color_picker_active = False  # Para controlar se o círculo de cores está visível
+# Lista para armazenar os segmentos do pincel (vários traços)
+drawing_segments = []
+# Configurar a cor do pincel
+brush_color = (0, 255, 0)  # Verde, por exemplo
+# Tamanho da ponta do pincel
+brush_size = 5
+pinching = False  # Estado da pinça
+was_pinching = False
+
+
+def draw_color_button(imgage):
+    """Desenha o botão de cor no canto superior direito."""
+    cv2.rectangle(img, (img.shape[1] - 1250, 10), (img.shape[1] - 1200, 60), brush_color, -1)
+
+
+def draw_eraser_button(imgage):
+    """Desenha o botão de cor no canto superior direito."""
+    cv2.rectangle(img, (img.shape[1] - 1250, 150), (img.shape[1] - 1200, 200), (0, 0, 0), -1)
+
+
+def draw_undo_button(imgage):
+    """Desenha o botão de cor no canto superior direito."""
+    cv2.rectangle(img, (img.shape[1] - 1250, 300), (img.shape[1] - 1200, 350), (255, 255, 255), -1)
+
+
+def draw_color_wheel(image):
+    """Desenha um círculo de cores na tela."""
+    radius = 150
+    center = (img.shape[1] - 650, 400)
+    num_colors = len(color_wheel)
+    angle_step = 360 // num_colors
+
+    for i, color in enumerate(color_wheel):
+        start_angle = i * angle_step
+        end_angle = (i + 1) * angle_step
+        cv2.ellipse(img, center, (radius, radius), 0, start_angle, end_angle, color, thickness=-1)
+
+
+def detect_color_selection(hand, imgage):
+    """Detecta se a pinça está sobre o círculo de cores e retorna a cor selecionada."""
+    global brush_color
+
+    if color_picker_active:
+        hand = hands[0]
+        lmList = hand['lmList']
+        polegarX, polegarY = lmList[4][0], lmList[4][1]
+        indicadorX, indicadorY = lmList[8][0], lmList[8][1]
+        pincaX, pincaY = (polegarX + indicadorX) // 2, (polegarY + indicadorY) // 2
+        radius = 150
+        center = (img.shape[1] - 650, 400)
+        distance = np.linalg.norm(np.array([pincaX, pincaY]) - np.array(center))
+
+        if distance <= radius:
+            angle = np.arctan2(pincaY - center[1], pincaX - center[0]) * 180 / np.pi
+            angle = (angle + 360) % 360
+            selected_index = int(angle // (360 // len(color_wheel)))
+            if pinching:
+                brush_color = color_wheel[selected_index]
+
+
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap.set(3, 1080)
+cap.set(4, 720)
+pTime = 0  # Usado para calcular o FPS
+font = ImageFont.truetype('arial.ttf', size=50)
+font_color = (230, 200, 50)
+font_color2 = (50, 210, 15)
+detector = HandDetector(detectionCon=0.5)
+
+while True:
+    success, img = cap.read()
+    img = cv2.flip(img, 1)  # Espelha a imagem horizontalmente
+    hands, img = detector.findHands(img=img)
+    draw_color_button(img)
+    draw_eraser_button(img)
+    draw_undo_button(img)
+
+    if hands:
+        hand1 = hands[0]
+        lmList1 = hand1['lmList']
+        x1, y1 = lmList1[4][0], lmList1[4][1]
+        x2, y2 = lmList1[8][0], lmList1[8][1]
+        mid_x, mid_y = (x1 + x2) // 2, (y1 + y2) // 2
+        length = int(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5)
+
+        if length > 30:
+            # Quando a distância entre os dedos é grande (pinça solta)
+            cv2.circle(img, (int(x1), int(y1)), 5, font_color, -1)
+            cv2.circle(img, (int(x2), int(y2)), 5, font_color, -1)
+            pinching = False  # Pinça não está ativa
+        else:
+            # Quando a pinça está ativa
+            cv2.circle(img, (int(mid_x), int(mid_y)), 8, brush_color, -1)
+
+            if not color_picker_active:
+                # Se a lista de segmentos estiver vazia, crie um novo segmento
+                if len(drawing_segments) == 0 or not pinching:
+                    drawing_segments.append([])  # Cria um novo segmento
+
+                # Adiciona o ponto atual ao segmento mais recente
+                drawing_segments[-1].append((mid_x, mid_y, brush_color))
+
+            pinching = True  # Pinça está ativa
+
+        # Detecta pinça sobre o botão de cor
+        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (10 < mid_y < 60) and pinching:
+            if pinching and not was_pinching:
+                # Alterna o estado da color wheel quando a pinça é feita
+                color_picker_active = not color_picker_active
+
+        # Detecta pinça sobre o botão de apagar
+        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (150 < mid_y < 200) and pinching:
+            if pinching and not was_pinching:
+                # Apaga toda a tela ao detectar a pinça no botão de apagar
+                drawing_segments = []
+
+        # Atualiza o estado anterior da pinça
+        was_pinching = pinching
+
+        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (300 < mid_y < 350) and pinching:
+            if pinching and not was_pinching:
+                # Remove o último segmento se houver pelo menos um segmento desenhado
+                if len(drawing_segments) > 0:
+                    drawing_segments.pop()
+                if len(drawing_segments) > 0:
+                    drawing_segments.pop()
+
+        if color_picker_active:
+            draw_color_wheel(img)
+            detect_color_selection(hand1, img)
+
+    # Transforma a imagem cv2 para imagem PIL para usar fontes diferentes
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    draw = ImageDraw.Draw(pil_img)
+
+    if hands:
+        draw.text((mid_x, mid_y), str(length), font=font, fill=font_color)
+
+    # Converte a imagem PIL de volta para OpenCV
+    img2 = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+    # Desenha todos os segmentos do rastro na imagem img2
+    for segment in drawing_segments:
+        for i in range(1, len(segment)):
+            # Desenhar uma linha entre os pontos sucessivos de cada segmento
+            # Extraímos as coordenadas e a cor de cada ponto
+            x1, y1, color1 = segment[i - 1]
+            x2, y2, color2 = segment[i]
+
+            # Desenhamos a linha entre os pontos sucessivos usando a cor correspondente
+            cv2.line(img2, (x1, y1), (x2, y2), color1, brush_size)
+
+    cv2.imshow("Image", img2)
+
+    # Mantém a janela aberta e atualiza a cada frame; espera 1ms entre frames
+    key = cv2.waitKey(1)
+    if key == ord('q') or key == 27:  # Se 'q' ou ESC forem pressionados, saia
+        break
+
+cap.release()
+cv2.destroyAllWindows()
