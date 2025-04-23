@@ -122,47 +122,44 @@ while True:
         mid_x, mid_y = (x1 + x2) // 2, (y1 + y2) // 2
         length = int(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5)
 
+        # Verifica se a pinça está ativa
         if length > 30:
             # Quando a distância entre os dedos é grande (pinça solta)
             cv2.circle(img, (int(x1), int(y1)), 5, font_color, -1)
             cv2.circle(img, (int(x2), int(y2)), 5, font_color, -1)
             pinching = False  # Pinça não está ativa
+
         else:
             # Quando a pinça está ativa
             cv2.circle(img, (int(mid_x), int(mid_y)), 8, brush_color, -1)
-
-            if not color_picker_active:
-                # Se a lista de segmentos estiver vazia, crie um novo segmento
-                if len(drawing_segments) == 0 or not pinching:
-                    drawing_segments.append([])  # Cria um novo segmento
-
-                # Adiciona o ponto atual ao segmento mais recente
-                drawing_segments[-1].append((mid_x, mid_y, brush_color))
-
             pinching = True  # Pinça está ativa
 
-        # Detecta pinça sobre o botão de cor
-        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (10 < mid_y < 60) and pinching:
-            if pinching and not was_pinching:
-                # Alterna o estado da color wheel quando a pinça é feita
-                color_picker_active = not color_picker_active
+            # Detecta pinça sobre o botão de cor
+            if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (10 < mid_y < 60):
+                if not was_pinching:
+                    color_picker_active = not color_picker_active
 
-        # Detecta pinça sobre o botão de apagar
-        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (150 < mid_y < 200) and pinching:
-            if pinching and not was_pinching:
-                # Apaga toda a tela ao detectar a pinça no botão de apagar
-                drawing_segments = []
+            # Detecta pinça sobre o botão de apagar
+            elif (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (150 < mid_y < 200):
+                if not was_pinching:
+                    drawing_segments = []
+
+            # Detecta pinça sobre o botão de desfazer (undo)
+            elif (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (300 < mid_y < 350):
+                if not was_pinching:
+                    if len(drawing_segments) > 0:
+                        drawing_segments.pop()
+
+            else:
+                if not color_picker_active:  # Só desenha se a roda de cores NÃO estiver ativa
+                    if not was_pinching:
+                        drawing_segments.append([])  # Começa um novo segmento
+
+                    if len(drawing_segments) > 0:
+                        drawing_segments[-1].append((mid_x, mid_y, brush_color))
 
         # Atualiza o estado anterior da pinça
         was_pinching = pinching
-
-        if (img.shape[1] - 1250 < mid_x < img.shape[1] - 1200) and (300 < mid_y < 350) and pinching:
-            if pinching and not was_pinching:
-                # Remove o último segmento se houver pelo menos um segmento desenhado
-                if len(drawing_segments) > 0:
-                    drawing_segments.pop()
-                if len(drawing_segments) > 0:
-                    drawing_segments.pop()
 
         if color_picker_active:
             draw_color_wheel(img)
@@ -194,6 +191,8 @@ while True:
 
     # Mantém a janela aberta e atualiza a cada frame; espera 1ms entre frames
     key = cv2.waitKey(1)
+    if cv2.getWindowProperty("Image", cv2.WND_PROP_VISIBLE) < 1:
+        break
     if key == ord('q') or key == 27:  # Se 'q' ou ESC forem pressionados, saia
         break
 
